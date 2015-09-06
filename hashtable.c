@@ -1,6 +1,7 @@
 #include <hashtable.h>
 #include <stdlib.h>
-#include <string.h>;
+#include <stdio.h>
+#include <string.h>
 /* (Mostly PHP's unrolled implementation.)
  * DJBX33A (Daniel J. Bernstein, Times 33 with Addition)
  *
@@ -65,7 +66,7 @@ static unsigned long inline hash_djbx(const char * key, unsigned int len) {
 /* Define so we can switch hash funcs easily.*/
 #define HASH(k, l) hash_djbx(k, l)
 
-void hashtable_init(HashTable * table, const unsigned int size) {
+void hashtable_init(HashTable * table, unsigned int size) {
 	/* Find power of two greater than size. Min size is 8 elems. */
 	unsigned int i = 3;
 	for (;(1U << i) < size; i++);
@@ -73,7 +74,7 @@ void hashtable_init(HashTable * table, const unsigned int size) {
 	table->size = 1 << i;
 	table->mask = table->size - 1;
 	printf("Init: HashTable with size %u (requested %u).\n", table->size, size);
-	table->entries = malloc(table->size * sizeof(Entry *));
+	table->entries = calloc(table->size, sizeof(Entry));
 }
 
 void hashtable_deinit(HashTable * table) {
@@ -86,79 +87,93 @@ void hashtable_resize(HashTable * table) {
 
 void hashtable_debug(HashTable * table) {
 	unsigned int i;
-	Entry * pEntry;
+	Item * pItem;
 	for (i = 0; i < table->size; i++) {
-		pEntry = table->entries[i];
+		pItem = table->entries[i].pHead;
 		printf("%i => ", i);
-		while (pEntry != NULL) {		
-			printf("%p, ",pEntry);
-			pEntry = pEntry->pNext;
+		while (pItem != NULL) {		
+			printf("%p, ", pItem);
+			pItem = pItem->pNext;
 		} 
 		puts(" NULL.");
 	}
 }
 
 /* Compare an entry, with full hash, key and length. */
-static int inline hashtable_entry_test(Entry * e, const unsigned long hash, const char * key, unsigned int len) {
+static int inline hashtable_entry_test(Item * i, unsigned long hash, const char * key, unsigned int len) {
 	/* Compare unmasked hash and key length. */
-	if ((e->hash != hash) || (e->key_len != len)) {
+	if ((i->hash != hash) || (i->key_len != len)) {
 		return 0;
 	}
 	/* Compare keys */
-	if (strncmp(key, e->key, len) != 0) { 
+	if (memcmp(key, i->key, len) != 0) { 
 		return 0;
 	}
 	return 1;
 }
 
 void * hashtable_get(HashTable * table, const char * key, unsigned int len) {
-	Entry * pEntry;
+	Item * pItem;
 	unsigned long hash = HASH(key, len);
 	/* TODO: Check if table is init'd. */
 	/* Hash the key. */
 	printf("Get: key %s hashed to %lu.\n", key, hash);
-	pEntry = table->entries[hash & table->mask];
+	pItem = table->entries[hash & table->mask].pHead;
 	/* Is this a list? */
-	printf("Get: chain head @ %p.\n", pEntry);
-	while (pEntry != NULL) {
-		if (hashtable_entry_test(pEntry, hash, key, len)) {
-			return pEntry->value;
+	printf("Get: chain head @ %p.\n", pItem);
+	while (pItem != NULL) {
+		if (hashtable_entry_test(pItem, hash, key, len)) {
+			return pItem->value;
 		}
-		pEntry = pEntry->pNext;
+		pItem = pItem->pNext;
 	}
 	return NULL;
 }
 
-void hashtable_set(HashTable * table, const char * key, void * data) {
-
-}
-
-/* Insert an entry given that we're sure there isn't one. */
-void hashtable_insert(HashTable * table, const char * key, unsigned int len, void * value) {
+/* Insert or update existing value. */
+void hashtable_set(HashTable * table, const char * key, unsigned int len, void * value) {
 	Entry * pEntry;
+	Item * pItem;
 	unsigned long hash = HASH(key, len);
 	printf("Insert: key %s hashed to %lu.\n", key, hash);
 	/* TODO: Check if table is init'd. */
-	/* TODO: Resize if needed */
-	pEntry = table->entries[hash & table->mask];
-	if (pEntry != NULL) {
-		/* Insert by chaining */
-		puts("Insert: collision! Using chaining.");
-		while (pEntry->pNext != NULL) {
-			pEntry = pEntry->pNext;
+	/* TODO: Resize if needed. */
+	pEntry = &(table->entries[hash & table->mask]);
+	pItem = pEntry->pHead;
+
+	while (pItem != NULL) {
+		if (hashtable_entry_test(pItem, hash, key, len)) {
+			break;
+		}		
+		pItem = pItem->pNext;
+	}
+
+	if (pItem == NULL) {
+		puts("Set: inserting value.");
+		table->num_elements++;
+		pItem = malloc(sizeof(Item));
+		if (pEntry->pTail != NULL) {
+			/* Make tail item's next point to new item. */
+			pEntry->pTail->pNext = pItem;
 		}
-		pEntry->pNext = malloc(sizeof(Entry));
-		pEntry->pNext->pPrev = pEntry;
-		pEntry = pEntry->pNext;
+		/* Make this item point to list tail (whether NULL or not). */
+		pItem->pPrev = pEntry->pTail;
+		/* This item is the new tail */
+		pEntry->pTail = pItem;
+		/* This item points to nothing. */
+		pItem->pNext = NULL;
+		if (pEntry->pHead == NULL) {
+			/* This is the first in the list. */
+			pEntry->pHead = pItem;
+			pItem->pPrev = NULL;
+		}
+		pItem->hash = hash;
+		pItem->key = malloc(len * sizeof(char));
+		pItem->key_len = len;
+		memcpy(pItem->key, key, len * sizeof(char));
 	}
 	else {
-		pEntry = malloc(sizeof(Entry));
-		table->entries[hash & table->mask] = pEntry;
-		pEntry = table->entries[hash & table->mask];
+		puts("Set: updating value.");
 	}
-	pEntry->hash = hash;
-	pEntry->value = value;
-	pEntry->key = malloc(len * sizeof(char));
-	pEntry->key_len = len;
-	memcpy(pEntry->key, key, len * sizeof(char));
+	pItem->value = value;
 }
