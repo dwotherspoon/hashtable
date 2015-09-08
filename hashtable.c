@@ -78,6 +78,7 @@ void hashtable_init(HashTable * table, unsigned int size) {
 }
 
 void hashtable_deinit(HashTable * table) {
+	/* Need to iterate over and free everything */
 	free(table->entries);
 }
 
@@ -101,6 +102,10 @@ void hashtable_debug(HashTable * table) {
 
 /* Compare an entry, with full hash, key and length. */
 static int inline hashtable_entry_test(Item * i, unsigned long hash, const char * key, unsigned int len) {
+	/* Always false for null items. */
+	if (i == NULL) {
+		return 0;
+	}
 	/* Compare unmasked hash and key length. */
 	if ((i->hash != hash) || (i->key_len != len)) {
 		return 0;
@@ -112,11 +117,11 @@ static int inline hashtable_entry_test(Item * i, unsigned long hash, const char 
 	return 1;
 }
 
+/* Return pointer to value in table or null if not in table. */
 void * hashtable_get(HashTable * table, const char * key, unsigned int len) {
 	Item * pItem;
 	unsigned long hash = HASH(key, len);
 	/* TODO: Check if table is init'd. */
-	/* Hash the key. */
 	printf("Get: key %s hashed to %lu.\n", key, hash);
 	pItem = table->entries[hash & table->mask].pHead;
 	/* Is this a list? */
@@ -128,6 +133,46 @@ void * hashtable_get(HashTable * table, const char * key, unsigned int len) {
 		pItem = pItem->pNext;
 	}
 	return NULL;
+}
+
+/* Find and delete a value in table. Returns pointer to value or NULL */
+void * hashtable_unset(HashTable * table, const char * key, unsigned int len) {
+	Entry * pEntry;
+	Item * pItem;
+	void * result = NULL;
+	unsigned long hash = HASH(key, len);
+	/* TODO: Check if table is init'd. */
+	pEntry = &(table->entries[hash & table->mask]);
+	pItem = pEntry->pHead;
+	while (pItem != NULL) {
+		if (hashtable_entry_test(pItem, hash, key, len)) {
+			break;
+		}
+		pItem = pItem->pNext;
+	}
+	if (pItem != NULL) {
+		printf("Delete: found item @ %p.\n", pItem);
+		if (pItem->pPrev == NULL) {
+			/* Item is the head. */
+			pEntry->pHead = pItem->pNext;
+		}
+		else {
+			pItem->pPrev->pNext = pItem->pNext;
+		}
+		if (pItem->pNext == NULL) {
+			/* Item is the tail. */
+			pEntry->pTail = pItem->pPrev;
+		}
+		else {
+			pItem->pNext->pPrev = pItem->pPrev;
+		}
+		/* Free memory. */
+		result = pItem->value;
+		free(pItem->key);
+		free(pItem);
+		table->num_elements--;
+	}
+	return  result;
 }
 
 /* Insert or update existing value. */
@@ -150,7 +195,6 @@ void hashtable_set(HashTable * table, const char * key, unsigned int len, void *
 
 	if (pItem == NULL) {
 		puts("Set: inserting value.");
-		table->num_elements++;
 		pItem = malloc(sizeof(Item));
 		if (pEntry->pTail != NULL) {
 			/* Make tail item's next point to new item. */
@@ -171,9 +215,35 @@ void hashtable_set(HashTable * table, const char * key, unsigned int len, void *
 		pItem->key = malloc(len * sizeof(char));
 		pItem->key_len = len;
 		memcpy(pItem->key, key, len * sizeof(char));
+		table->num_elements++;
 	}
 	else {
 		puts("Set: updating value.");
 	}
 	pItem->value = value;
+}
+
+/* Iterator support */
+
+/* Set the internal pointers to the first element in the table. */
+void hashtable_iter_first(HashTable * table) {
+
+}
+
+/* Set the internal pointers to the next element in the table. */
+void hashtable_iter_next(HashTable * table) {
+
+}
+
+/* Return pointer to the key for the element pointed to by the interal pointers. */
+char * hashtable_iter_key(HashTable * table) {
+	return (table == NULL) ? NULL : table->pItem->key;
+}
+
+unsigned int hashtable_iter_key_len(HashTable * table) {
+	return (table == NULL) ? NULL : table->pItem->key_len;
+}
+
+void * hashtable_iter_value(HashTable * table) {
+	return (table == NULL) ? NULL : table->pItem->value;
 }

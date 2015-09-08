@@ -22,6 +22,11 @@ typedef struct hashtable_t {
 	unsigned int mask;
 	/* Entries array (main storage). */
 	Entry * entries;
+
+	/* Pointer to current Entry (for iterator). */
+	Entry * pEntry;
+	/* Pointer to current item in pEntry (for iterator). */
+	Item * pItem;
 } HashTable;
 
 void hashtable_init(HashTable * table, unsigned int size);
@@ -30,3 +35,4 @@ void hashtable_debug(HashTable * table);
 
 void * hashtable_get(HashTable * table, const char * key, unsigned int len);
 void hashtable_set(HashTable * table, const char * key, unsigned int len, void * value);
+void * hashtable_unset(HashTable * table, const char * key, unsigned int len);
