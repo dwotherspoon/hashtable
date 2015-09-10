@@ -1,3 +1,5 @@
+#include <stdint.h>
+
 typedef struct entry_t {
 	uint64_t hash;
 	char * key;
@@ -20,7 +22,7 @@ typedef struct hashtable_t {
 	/* Pointer to current Entry (for iterator). */
 	Entry * pEntry;
 	/* Current position in entries (for iterator). */
-	uint32_t pos_entries;
+	uint32_t entries_pos;
 } HashTable;
 
 void hashtable_init(HashTable * table, uint32_t size);
@@ -30,3 +32,10 @@ void hashtable_debug(HashTable * table);
 void * hashtable_get(HashTable * table, const char * key, uint32_t len);
 void hashtable_set(HashTable * table, const char * key, uint32_t len, void * value);
 void * hashtable_unset(HashTable * table, const char * key, uint32_t len);
+
+void hashtable_iter_first(HashTable * table);
+int hashtable_iter_next(HashTable * table);
+
+char * hashtable_iter_key(HashTable * table);
+unsigned int hashtable_iter_key_len(HashTable * table);
+void * hashtable_iter_value(HashTable * table);

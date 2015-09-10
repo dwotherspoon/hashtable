@@ -1,4 +1,3 @@
-#include <stdint.h>
 #include <hashtable.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -223,22 +222,46 @@ void hashtable_set(HashTable * table, const char * key, uint32_t len, void * val
 	pEntry->value = value;
 }
 
-/* Iterator support */
+/* Iterator interface follow */
 
 /* Set the internal pointers to the first element in the table. */
 void hashtable_iter_first(HashTable * table) {
-	unsigned int pos;
+	unsigned int pos = 0;
 	if (table->count) {
 		/* We know there's an element, iterate until we find it. */
-		for (pos = 0; (pos < table->size) && table->entries[pos]; pos++);
+		for (;(pos < table->size) && !table->entries[pos]; pos++);
 		/* Set pointers. */
 		table->pEntry = table->entries[pos];
+		table->entries_pos = pos;
 	}
 }
 
-/* Set the internal pointers to the next element in the table. */
-void hashtable_iter_next(HashTable * table) {
-	
+/* Set the internal pointers to the next element in the table. 0 if end of table. */
+int hashtable_iter_next(HashTable * table) {
+	uint32_t pos = 1 + table->entries_pos;
+	unsigned int result = 0;
+	if (table->pEntry) {
+		if (table->pEntry->pNext) {
+			table->pEntry = table->pEntry->pNext;
+			result = 1;
+		}
+		else {
+			/* Look for the next element. */
+			for (;(pos < table->size) && !table->entries[pos]; pos++);
+			/* Set pointers */
+			if (table->entries[pos]) {
+				table->pEntry = table->entries[pos];
+				table->entries_pos = pos;
+				result = 1;
+			}
+			else {
+				table->pEntry = NULL;
+				table->entries_pos = 0;
+				result = 0;
+			}
+		}
+	}
+	return result;
 }
 
 /* Consider making these macros. */
