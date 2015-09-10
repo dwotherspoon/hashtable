@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 /* (Mostly PHP's unrolled implementation.)
- * DJBX33A (Daniel J. Bernstein, Times 33 with Addition)
+ * DJBX33A (DJB2) (Daniel J. Bernstein, Times 33 with Addition)
  *
  * This is Daniel J. Bernstein's popular `times 33' hash function as
  * posted by him years ago on comp.lang.c. It basically uses a function
@@ -227,23 +227,37 @@ void hashtable_set(HashTable * table, const char * key, unsigned int len, void *
 
 /* Set the internal pointers to the first element in the table. */
 void hashtable_iter_first(HashTable * table) {
-
+	unsigned int pos;
+	if (table->num_elements) {
+		/* We know there's an element, iterate until we find it. */
+		for (pos = 0; (pos < table->num_elements) && (table->entries[pos].pHead != NULL); pos++);
+		/* Set pointers. */
+		table->pEntry = &(table->entries[pos]);
+		table->pItem = table->pEntry->pHead;
+	}
 }
 
 /* Set the internal pointers to the next element in the table. */
 void hashtable_iter_next(HashTable * table) {
-
+	if (table->pEntry && table->pItem) {
+		if (table->pItem->pNext) {
+			/* Simply move to next. */
+		}
+		else {
+			/* Search for next occupied entry. */
+		}
+	}
 }
 
-/* Return pointer to the key for the element pointed to by the interal pointers. */
+/* Consider making these macros. */
 char * hashtable_iter_key(HashTable * table) {
-	return (table == NULL) ? NULL : table->pItem->key;
+	return (table == NULL || table->pItem == NULL) ? (char *)NULL : table->pItem->key;
 }
 
 unsigned int hashtable_iter_key_len(HashTable * table) {
-	return (table == NULL) ? NULL : table->pItem->key_len;
+	return (table == NULL || table->pItem == NULL) ? 0 : table->pItem->key_len;
 }
 
 void * hashtable_iter_value(HashTable * table) {
-	return (table == NULL) ? NULL : table->pItem->value;
+	return (table == NULL || table->pItem == NULL) ? NULL : table->pItem->value;
 }

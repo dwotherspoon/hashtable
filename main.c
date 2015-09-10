@@ -14,6 +14,9 @@ char data3[] = "Overwrite a string somewhere.";
 
 int main(int argv, char * argc[]) {
 	char * res;
+
+	printf("Int is %lu bytes.\n", sizeof(int));
+
 	hashtable_init(&test, 7);
 
 	printf("Inserting %s into table.\n", key1);
