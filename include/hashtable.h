@@ -39,3 +39,6 @@ int hashtable_iter_next(HashTable * table);
 char * hashtable_iter_key(HashTable * table);
 unsigned int hashtable_iter_key_len(HashTable * table);
 void * hashtable_iter_value(HashTable * table);
+
+
+void hashtable_resize(HashTable * table);

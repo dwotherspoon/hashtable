@@ -83,7 +83,44 @@ void hashtable_deinit(HashTable * table) {
 }
 
 void hashtable_resize(HashTable * table) {
-
+	Entry ** new_entries;
+	Entry * pEntry, * pNext, * pTail;
+	uint32_t pos = 0;
+	uint32_t new_size = table->size << 1;
+	uint32_t new_mask = new_size - 1;
+	printf("Resize: Hashtable resized to %u.\n", new_size);
+	/* PHP handles this using realloc as they have a linked list
+		 over all entries to maintain order. */
+	new_entries = calloc(new_size, sizeof(Entry *));
+	/* Reindex (TODO: possible code repetition with set) */
+	for (;pos < table->size; pos++) {
+		pEntry = table->entries[pos];
+		while (pEntry) {
+			pNext = pEntry->pNext;
+			if (new_entries[pEntry->hash & new_mask]) {
+				pTail = new_entries[pEntry->hash & new_mask];
+				/* Find the tail */
+				while (pTail->pNext) {
+					pTail = pTail->pNext;
+				}
+				pTail->pNext = pEntry;
+				pEntry->pPrev = pTail;
+				pEntry->pNext = NULL;
+			}
+			else {
+				/* Item is to be head in new entries */
+				new_entries[pEntry->hash & new_mask] = pEntry;
+				pEntry->pPrev = NULL;
+				pEntry->pNext = NULL;
+			}
+			pEntry = pNext;
+		}
+	}
+	/* Free what we had and update struct. */
+	free(table->entries);
+	table->entries = new_entries;
+	table->size = new_size;
+	table->mask = new_mask;
 }
 
 void hashtable_debug(HashTable * table) {
@@ -174,7 +211,7 @@ void hashtable_set(HashTable * table, const char * key, uint32_t len, void * val
 	/* 0 = Chain is empty, 1 = Found, 2 = Hit tail without finding. */
 	int action = 0; 
 	unsigned long hash = HASH(key, len);
-	printf("Insert: key %s hashed to %lu.\n", key, hash);
+	//printf("Insert: key %s hashed to %lu.\n", key, hash);
 	/* TODO: Check if table is init'd. */
 	/* TODO: Resize if needed. */
 	pEntry = table->entries[hash & table->mask];
@@ -213,6 +250,7 @@ void hashtable_set(HashTable * table, const char * key, uint32_t len, void * val
 		pEntry->key = malloc(len * sizeof(char));
 		pEntry->key_len = len;
 		memcpy(pEntry->key, key, len * sizeof(char));
+		printf("Set: Allocated %u bytes for key %s.\n", len, key);
 		table->count++;
 	}
 	else {
@@ -220,6 +258,9 @@ void hashtable_set(HashTable * table, const char * key, uint32_t len, void * val
 	}
 	/* Set value. */
 	pEntry->value = value;
+	if (table->count > table->size) {
+		hashtable_resize(table);
+	}
 }
 
 /* Iterator interface follow */
