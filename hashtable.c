@@ -1,7 +1,9 @@
 #include <hashtable.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include <string.h>
+
+#include <stdio.h>
+
 /* (Mostly PHP's unrolled implementation.)
  * DJBX33A (DJB2) (Daniel J. Bernstein, Times 33 with Addition)
  *
@@ -75,7 +77,7 @@ void hashtable_init(HashTable *table, uint32_t size) {
 	table->count = 0;
 	table->size = 1 << i;
 	table->mask = table->size - 1;
-	printf("Init: HashTable with size %u (requested %u).\n", table->size, size);
+	DBGF("Init: HashTable with size %u (requested %u).\n", table->size, size);
 	table->entries = calloc(table->size, sizeof(Entry *));
 }
 
@@ -106,50 +108,56 @@ static void hashtable_resize(HashTable *table) {
 	uint32_t new_size = table->size << 1;
 	uint32_t new_mask = new_size - 1;
 
-	printf("Resize: Hashtable resized to %u.\n", new_size);
+	DBGF("Resize: Resizing to %u.\n", new_size);
 	/* PHP handles this using realloc as they have a linked list
 		 over all entries to maintain order. */
 	new_entries = calloc(new_size, sizeof(Entry *));
-	/* Reindex (TODO: possible code repetition with set) */
-	for (;pos < table->size; pos++) {
-		pEntry = table->entries[pos];
-		while (pEntry) {
-			pNext = pEntry->pNext;
-			if (new_entries[pEntry->hash & new_mask]) {
-				pTail = new_entries[pEntry->hash & new_mask];
-				/* Find the tail */
-				while (pTail->pNext) {
-					pTail = pTail->pNext;
-				}
-				pTail->pNext = pEntry;
-				pEntry->pPrev = pTail;
-				pEntry->pNext = NULL;
-			}
-			else {
-				/* Item is to be head in new entries */
-				new_entries[pEntry->hash & new_mask] = pEntry;
-				pEntry->pPrev = NULL;
-				pEntry->pNext = NULL;
-			}
-			pEntry = pNext;
-		}
+	if (!new_entries) {
+		DBG("Resize: Warning hash table resize failed.");
 	}
-	/* Free what we had and update struct. */
-	free(table->entries);
-	table->entries = new_entries;
-	table->size = new_size;
-	table->mask = new_mask;
+	else {
+		for (;pos < table->size; pos++) {
+			pEntry = table->entries[pos];
+			while (pEntry) {
+				pNext = pEntry->pNext;
+				if (new_entries[pEntry->hash & new_mask]) {
+					pTail = new_entries[pEntry->hash & new_mask];
+					/* Find the tail */
+					while (pTail->pNext) {
+						pTail = pTail->pNext;
+					}
+					pTail->pNext = pEntry;
+					pEntry->pPrev = pTail;
+					pEntry->pNext = NULL;
+				}
+				else {
+					/* Item is to be head in new entries */
+					new_entries[pEntry->hash & new_mask] = pEntry;
+					pEntry->pPrev = NULL;
+					pEntry->pNext = NULL;
+				}
+				pEntry = pNext;
+			}
+		}
+		/* Free what we had and update struct. */
+		free(table->entries);
+		table->entries = new_entries;
+		table->size = new_size;
+		table->mask = new_mask;
+	}
 }
 
 void hashtable_debug(HashTable *table) {
 	uint32_t i;
 	Entry *pEntry;
 
+	printf("Hash Table @ %p:\n", table);
+	printf("\tSize: %d, %d entries.\n", table->size, table->count);
 	for (i = 0; i < table->size; i++) {
-		printf("%i => ", i);
+		printf("\t%i => ", i);
 		pEntry = table->entries[i];
 		for (; pEntry; pEntry = pEntry->pNext) {		
-			printf("%p, ", pEntry);
+			printf("%s (%p), ", pEntry->key, pEntry);
 		} 
 		puts(" NULL.");
 	}
@@ -184,9 +192,9 @@ void * hashtable_get(HashTable *table, const char *key, uint32_t len) {
 	uint64_t hash = HASH(key, len);
 
 	/* TODO: Check if table is init'd. */
-	//printf("Get: key %s hashed to %lu.\n", key, hash);
+	//DBGF("Get: key %s hashed to %lu.\n", key, hash);
 	pEntry = table->entries[hash & table->mask];
-	printf("Get: chain head @ %p.\n", pEntry);
+	DBGF("Get: chain head @ %p.\n", pEntry);
 	while (!result && pEntry) {
 		if (hashtable_entry_test(pEntry, hash, key, len)) {
 			result = pEntry->value;
@@ -208,7 +216,7 @@ void * hashtable_unset(HashTable *table, const char *key, uint32_t len) {
 	for (;!hashtable_entry_test(pEntry, hash, key, len) && pEntry; pEntry = pEntry->pNext);
 	/* If pEntry is not NULL, entry has been found */
 	if (pEntry) {
-		printf("Unset: found item @ %p.\n", pEntry);
+		DBGF("Unset: found item @ %p.\n", pEntry);
 		if (!pEntry->pPrev) {
 			/* Entry is the head. */
 			table->entries[hash & table->mask] = pEntry->pNext;
@@ -237,7 +245,7 @@ void hashtable_set(HashTable *table, const char *key, uint32_t len, void *value)
 	int action = 0; 
 	uint64_t hash = HASH(key, len);
 
-	//printf("Insert: key %s hashed to %lu.\n", key, hash);
+	//DBGF("Insert: key %s hashed to %lu.\n", key, hash);
 	/* TODO: Check if table is init'd. */
 	pEntry = table->entries[hash & table->mask];
 	/* Search chain. */
@@ -257,14 +265,14 @@ void hashtable_set(HashTable *table, const char *key, uint32_t len, void *value)
 	if (action != 1) {
 		if (action == 0) {
 			/* Empty chain insert. */
-			puts("Set: inserting value (head).");
+			DBG("Set: inserting value (head).");
 			pEntry = malloc(sizeof(Entry));
 			table->entries[hash & table->mask] = pEntry;
 			pEntry->pPrev = NULL;
 		}
 		else {
 			/* Non-empty chain insert. */
-			puts("Set: inserting value.");
+			DBG("Set: inserting value.");
 			pEntry->pNext = malloc(sizeof(Entry));
 			/* Point new entry back at tail. */
 			pEntry->pNext->pPrev = pEntry;
@@ -275,11 +283,11 @@ void hashtable_set(HashTable *table, const char *key, uint32_t len, void *value)
 		pEntry->key = malloc(len * sizeof(char));
 		pEntry->key_len = len;
 		memcpy(pEntry->key, key, len * sizeof(char));
-		printf("Set: Allocated %u bytes for key %s.\n", len, key);
+		DBGF("Set: Allocated %u bytes for key %s.\n", len, key);
 		table->count++;
 	}
 	else {
-		puts("Set: updating value.");
+		DBG("Set: updating value.");
 	}
 	/* Set value. */
 	pEntry->value = value;

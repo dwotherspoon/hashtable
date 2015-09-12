@@ -16,47 +16,58 @@ char * values[] = {"value1", "value2", "value3", "value4", "value5", "value6", "
 #define TRY_GET(K) 	res = hashtable_get(&test, K, sizeof(K) - 1); if (res != NULL) printf("%s => %s\n", (K), res); else printf("%s is not in table.\n", (K));
 
 int main(int argv, char * argc[]) {
-	char * res;
-	uint32_t i;
+	char buf[128]; 
+	char * cursor;
+	FILE * pFile;
+	uint32_t i = 0;
 
 	hashtable_init(&test, 7);
 
-	for (i = 0; i < (sizeof(keys) / sizeof(char *)); i++) {
-		printf("Set %s => %s\n", keys[i], values[i]);
-		hashtable_set(&test, keys[i], strlen(keys[i]) + 1, values[i]);
+	pFile = fopen("/usr/share/dict/words", "r");
+
+	while (fgets(buf, 128, pFile)) {
+		/* Remove new line chars */
+		for (cursor = buf; *cursor; cursor++) {
+			switch (*cursor) {
+				case '\n':
+				case '\r':
+					*cursor = '\0';
+					break;
+			}
+		}
+
+		hashtable_set(&test, buf, strlen(buf) + 1, (void *)i++);	
 	}
 
-	//hashtable_debug(&test);
-
-/*
-	printf("Inserting %s into table.\n", key1);
-	hashtable_set(&test, key1, sizeof(key1) - 1, data1);
-
-	TRY_GET(key1);
-
-	printf("Inserting %s into table.\n", key2);
-	hashtable_set(&test, key2, sizeof(key2) - 1 , data2);
-
-	TRY_GET(key1);
-	TRY_GET(key2);
-	puts("Table state:");
-	hashtable_debug(&test);
-
-	hashtable_set(&test, key1, sizeof(key1) - 1, data3);
-
-	printf("Hash table contains %i items.\n", test.count);
-	*/
-	//hashtable_debug(&test);
+	
 
 	hashtable_iter_first(&test);
 	do  {
-		printf("[%s] => %s\n", hashtable_iter_key(&test), hashtable_iter_value(&test));
+		//printf("[%s] => %d\n", hashtable_iter_key(&test), (uint32_t)hashtable_iter_value(&test));
 	} while (hashtable_iter_next(&test));
 
-	for (i = 0; i < (sizeof(keys) / sizeof(char *)); i++) {
-		printf("Get %s => %s\n", keys[i], hashtable_get(&test, keys[i], strlen(keys[i]) + 1));
-	}
+	hashtable_debug(&test);
 
+
+	i = 0;
+	fseek(pFile, 0, SEEK_SET);
+
+	/* Check */
+	while(fgets(buf, 128, pFile)) {
+		/* Remove new line chars */
+		for (cursor = buf; *cursor; cursor++) {
+			switch (*cursor) {
+				case '\n':
+				case '\r':
+					*cursor = '\0';
+					break;
+			}
+		}
+		putchar(hashtable_get(&test, buf, strlen(buf) + 1) == (void *)i++ ?  '.' : 'X');
+	}
+	putchar('\n');
+
+	fclose(pFile);
 	
 	hashtable_free(&test, NULL);
 	return 0;

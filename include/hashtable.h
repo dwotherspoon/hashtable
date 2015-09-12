@@ -43,4 +43,12 @@ char * hashtable_iter_key(HashTable *table);
 unsigned int hashtable_iter_key_len(HashTable *table);
 void * hashtable_iter_value(HashTable *table);
 
+#ifdef HASHTABLE_DBG
+	#define DBGF(...) printf(__VA_ARGS__)
+	#define DBG(S) puts(S)
+#else
+	#define DBGF(...) /* Nothing */
+	#define DBG(S) /* Nothing */
+#endif
+
 #endif

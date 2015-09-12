@@ -1,11 +1,11 @@
-CFLAGS=-Wall -Wextra -Wpedantic -g -O0 -I include/
+CFLAGS=-Wall -Wextra -Wpedantic -g -O0 -I include/ -pg
 CC=clang
 EXECNAME=a.out
 
 OBJ=main.o hashtable.o
 
 all: $(OBJ)
-	$(CC) -o $(EXECNAME) $(OBJ) 
+	$(CC) $(CFLAGS) -o $(EXECNAME) $(OBJ) 
 
 clean:
 	rm -f *.out
