@@ -35,10 +35,11 @@
  *                  -- Ralf S. Engelschall <rse@engelschall.com>
  */
 
-#define DJBX_ROUND(h, k) hash = ((h << 5) + h) + *k++;
+#define DJBX_ROUND(H, K) hash = (((H) << 5) + (H)) + *(K)++;
 
-static uint64_t inline hash_djbx(const char * key, uint32_t len) {
+static uint64_t inline hash_djbx(const char *key, uint32_t len) {
 	register uint64_t hash = 5381;
+
 	for (;len >= 8; len -= 8) {
 		DJBX_ROUND(hash, key);
 		DJBX_ROUND(hash, key);
@@ -66,9 +67,10 @@ static uint64_t inline hash_djbx(const char * key, uint32_t len) {
 /* Define so we can switch hash funcs easily.*/
 #define HASH(k, l) hash_djbx(k, l)
 
-void hashtable_init(HashTable * table, uint32_t size) {
+void hashtable_init(HashTable *table, uint32_t size) {
 	/* Find power of two greater than size. Min size is 8 elems. */
 	uint32_t i = 3;
+
 	for (;((uint32_t)1 << i) < size; i++);
 	table->count = 0;
 	table->size = 1 << i;
@@ -77,17 +79,33 @@ void hashtable_init(HashTable * table, uint32_t size) {
 	table->entries = calloc(table->size, sizeof(Entry *));
 }
 
-void hashtable_deinit(HashTable * table) {
-	/* Need to iterate over and free everything */
+void hashtable_free(HashTable *table, void (*free_func)(void *)) {
+	uint32_t pos = 0;
+	Entry *pEntry, *pNext;
+
+	for (; pos < table->size; pos++) {
+		pEntry = table->entries[pos];
+		for (; pEntry; pEntry = pNext) {
+			pNext = pEntry->pNext;
+			free(pEntry->key);
+			/* Ignore free_func if NULL. */
+			if (free_func) {
+				(*free_func)(pEntry->value);
+			}
+			free(pEntry);
+		}
+	}
+	/* Free entries */
 	free(table->entries);
 }
 
-void hashtable_resize(HashTable * table) {
-	Entry ** new_entries;
-	Entry * pEntry, * pNext, * pTail;
+static void hashtable_resize(HashTable *table) {
+	Entry **new_entries;
+	Entry *pEntry, *pNext, *pTail;
 	uint32_t pos = 0;
 	uint32_t new_size = table->size << 1;
 	uint32_t new_mask = new_size - 1;
+
 	printf("Resize: Hashtable resized to %u.\n", new_size);
 	/* PHP handles this using realloc as they have a linked list
 		 over all entries to maintain order. */
@@ -123,44 +141,50 @@ void hashtable_resize(HashTable * table) {
 	table->mask = new_mask;
 }
 
-void hashtable_debug(HashTable * table) {
+void hashtable_debug(HashTable *table) {
 	uint32_t i;
-	Entry * pEntry;
+	Entry *pEntry;
+
 	for (i = 0; i < table->size; i++) {
-		pEntry = table->entries[i];
 		printf("%i => ", i);
-		while (pEntry != NULL) {		
+		pEntry = table->entries[i];
+		for (; pEntry; pEntry = pEntry->pNext) {		
 			printf("%p, ", pEntry);
-			pEntry = pEntry->pNext;
 		} 
 		puts(" NULL.");
 	}
 }
 
-/* Compare an entry, with full hash, key and length. */
-static int inline hashtable_entry_test(Entry * pEntry, uint64_t hash, const char * key, uint32_t len) {
-	/* Always false for null items. */
+/* Test an entry, with full hash, key and length. */
+static int inline hashtable_entry_test(Entry *pEntry, uint64_t hash, const char *key, uint32_t len) {
 	if (pEntry == NULL) {
+		/* Always false for null items. */
 		return 0;
 	}
-	/* Compare unmasked hash and key length. */
 	if ((pEntry->hash != hash) || (pEntry->key_len != len)) {
+		/* Compare unmasked hash and key length. */
 		return 0;
 	}
-	/* Compare keys. */
+	
 	if (memcmp(key, pEntry->key, len) != 0) { 
+		/* Compare keys. */
 		return 0;
 	}
-	return 1;
+	else {
+		/* Matched. */
+		return 1;
+	}
+	return 0;
 }
 
 /* Return pointer to value in table or NULL if not in table. */
-void * hashtable_get(HashTable * table, const char * key, uint32_t len) {
-	Entry * pEntry;
-	void * result = NULL;
+void * hashtable_get(HashTable *table, const char *key, uint32_t len) {
+	Entry *pEntry;
+	void *result = NULL;
 	uint64_t hash = HASH(key, len);
+
 	/* TODO: Check if table is init'd. */
-	printf("Get: key %s hashed to %lu.\n", key, hash);
+	//printf("Get: key %s hashed to %lu.\n", key, hash);
 	pEntry = table->entries[hash & table->mask];
 	printf("Get: chain head @ %p.\n", pEntry);
 	while (!result && pEntry) {
@@ -173,10 +197,11 @@ void * hashtable_get(HashTable * table, const char * key, uint32_t len) {
 }
 
 /* Find and delete a value in table. Returns pointer to value or NULL. */
-void * hashtable_unset(HashTable * table, const char * key, uint32_t len) {
-	Entry * pEntry;
-	void * result = NULL;
+void * hashtable_unset(HashTable *table, const char *key, uint32_t len) {
+	Entry *pEntry;
+	void *result = NULL;
 	uint64_t hash = HASH(key, len);
+
 	/* TODO: Check if table is init'd. */
 	pEntry = table->entries[hash & table->mask];
 	/* Search chain for entry. */
@@ -206,14 +231,14 @@ void * hashtable_unset(HashTable * table, const char * key, uint32_t len) {
 }
 
 /* Insert or update existing value. */
-void hashtable_set(HashTable * table, const char * key, uint32_t len, void * value) {
-	Entry * pEntry;
+void hashtable_set(HashTable *table, const char *key, uint32_t len, void *value) {
+	Entry *pEntry;
 	/* 0 = Chain is empty, 1 = Found, 2 = Hit tail without finding. */
 	int action = 0; 
-	unsigned long hash = HASH(key, len);
+	uint64_t hash = HASH(key, len);
+
 	//printf("Insert: key %s hashed to %lu.\n", key, hash);
 	/* TODO: Check if table is init'd. */
-	/* TODO: Resize if needed. */
 	pEntry = table->entries[hash & table->mask];
 	/* Search chain. */
 	while (!action && pEntry) {
@@ -263,57 +288,61 @@ void hashtable_set(HashTable * table, const char * key, uint32_t len, void * val
 	}
 }
 
-/* Iterator interface follow */
+/* Iterator interface follows... */
 
 /* Set the internal pointers to the first element in the table. */
-void hashtable_iter_first(HashTable * table) {
+void hashtable_iter_first(HashTable *table) {
 	unsigned int pos = 0;
+
 	if (table->count) {
-		/* We know there's an element, iterate until we find it. */
-		for (;(pos < table->size) && !table->entries[pos]; pos++);
+		/* We know there's an element, iterate until we find it. (would out of bounds if empty) */
+		for (;(pos < table->size) && !table->entries[pos]; pos++)
+			;
 		/* Set pointers. */
 		table->pEntry = table->entries[pos];
 		table->entries_pos = pos;
 	}
+	else {
+		table->pEntry = NULL;
+	}
 }
 
 /* Set the internal pointers to the next element in the table. 0 if end of table. */
-int hashtable_iter_next(HashTable * table) {
-	uint32_t pos = 1 + table->entries_pos;
-	unsigned int result = 0;
-	if (table->pEntry) {
-		if (table->pEntry->pNext) {
-			table->pEntry = table->pEntry->pNext;
-			result = 1;
-		}
-		else {
-			/* Look for the next element. */
-			for (;(pos < table->size) && !table->entries[pos]; pos++);
-			/* Set pointers */
-			if (table->entries[pos]) {
-				table->pEntry = table->entries[pos];
-				table->entries_pos = pos;
-				result = 1;
-			}
-			else {
-				table->pEntry = NULL;
-				table->entries_pos = 0;
-				result = 0;
-			}
-		}
+int hashtable_iter_next(HashTable *table) {
+	uint32_t pos = table->entries_pos + 1;
+
+	if (!table->pEntry) {
+		return 0;
 	}
-	return result;
+
+	if (table->pEntry->pNext) {
+		table->pEntry = table->pEntry->pNext;
+		return 1;
+	}
+
+	/* Look for the next element. */
+	for (;(pos < table->size) && !table->entries[pos]; pos++)
+		;
+	if (pos < table->size) {
+		/* Element found */
+		table->pEntry = table->entries[pos];
+		table->entries_pos = pos;
+		return 1;
+	}
+
+	table->pEntry = NULL;
+	return 0;
 }
 
 /* Consider making these macros. */
-char * hashtable_iter_key(HashTable * table) {
+char * hashtable_iter_key(HashTable *table) {
 	return (table == NULL || table->pEntry == NULL) ? (char *)NULL : table->pEntry->key;
 }
 
-unsigned int hashtable_iter_key_len(HashTable * table) {
+unsigned int hashtable_iter_key_len(HashTable *table) {
 	return (table == NULL || table->pEntry == NULL) ? 0 : table->pEntry->key_len;
 }
 
-void * hashtable_iter_value(HashTable * table) {
+void * hashtable_iter_value(HashTable *table) {
 	return (table == NULL || table->pEntry == NULL) ? NULL : table->pEntry->value;
 }

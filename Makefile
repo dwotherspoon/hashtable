@@ -1,4 +1,4 @@
-CFLAGS=-Wall -Wextra -Wpedantic -O0 -I include/
+CFLAGS=-Wall -Wextra -Wpedantic -g -O0 -I include/
 CC=clang
 EXECNAME=a.out
 

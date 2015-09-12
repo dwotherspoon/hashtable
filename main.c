@@ -46,13 +46,18 @@ int main(int argv, char * argc[]) {
 
 	printf("Hash table contains %i items.\n", test.count);
 	*/
-	hashtable_debug(&test);
+	//hashtable_debug(&test);
 
 	hashtable_iter_first(&test);
 	do  {
 		printf("[%s] => %s\n", hashtable_iter_key(&test), hashtable_iter_value(&test));
 	} while (hashtable_iter_next(&test));
+
+	for (i = 0; i < (sizeof(keys) / sizeof(char *)); i++) {
+		printf("Get %s => %s\n", keys[i], hashtable_get(&test, keys[i], strlen(keys[i]) + 1));
+	}
+
 	
-	hashtable_deinit(&test);
+	hashtable_free(&test, NULL);
 	return 0;
 }
